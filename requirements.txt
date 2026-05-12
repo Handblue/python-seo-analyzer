@@ -4,3 +4,4 @@ lxml>=4.9.0
 PyYAML>=6.0
 colorama>=0.4.6
 playwright>=1.40.0
+flask>=3.0.0

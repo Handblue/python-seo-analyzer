@@ -1,0 +1,1293 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SEO Analyzer</title>
+<style>
+  :root {
+    --bg: #0f0f13; --surface: #1a1a23; --surface2: #22222e; --surface3: #2a2a38;
+    --text: #e2e2f0; --muted: #888; --border: #333; --accent: #7c6ef5;
+    --green: #4ade80; --yellow: #ffb347; --red: #ff4d4d; --blue: #60a5fa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* ── Layout ── */
+  .app { display: grid; grid-template-columns: 400px 1fr; height: 100vh; overflow: hidden; }
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .main { overflow: hidden; display: flex; flex-direction: column; }
+
+  /* ── Mode switcher ── */
+  .mode-bar { display: flex; background: var(--surface2); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .mode-btn { flex: 1; padding: 10px; border: none; background: none; color: var(--muted); font-size: .85rem;
+              font-family: inherit; cursor: pointer; font-weight: 600; border-bottom: 2px solid transparent; }
+  .mode-btn.on { color: var(--accent); border-bottom-color: var(--accent); background: var(--surface); }
+  .mode-view { display: none; flex: 1; flex-direction: column; overflow: hidden; min-height: 0; }
+  .mode-view.on { display: flex; }
+
+  /* ── Sidebar header ── */
+  .sidebar-header { padding: 20px 20px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .logo { font-size: 1.2rem; font-weight: 800; color: var(--accent); letter-spacing: -.02em; }
+  .logo span { color: var(--text); }
+  .subtitle { font-size: .76rem; color: var(--muted); margin-top: 2px; }
+
+  /* ── Form ── */
+  .form-body { padding: 16px 20px; flex: 1; overflow-y: auto; }
+  .field { margin-bottom: 14px; }
+  label { display: block; font-size: .76rem; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .05em; }
+  input[type=text], select {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 11px; border-radius: 7px; font-size: .88rem;
+    outline: none; transition: border-color .2s;
+  }
+  input[type=text]:focus, select:focus { border-color: var(--accent); }
+
+  /* ── Pages list ── */
+  .pages-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px; }
+  .pages-header label { margin: 0; }
+  .btn-add { background: var(--surface3); border: 1px solid var(--border); color: var(--accent);
+             padding: 3px 11px; border-radius: 5px; font-size: .78rem; cursor: pointer; }
+  .btn-add:hover { background: var(--accent); color: #fff; }
+
+  .page-row { background: var(--surface2); border: 1px solid var(--border); border-radius: 7px;
+              padding: 9px 11px; margin-bottom: 7px; display: grid;
+              grid-template-columns: 1fr 1fr; gap: 5px; position: relative; }
+  .page-row input, .page-row select { font-size: .8rem; padding: 5px 9px; }
+  .page-row .url-row { grid-column: 1/-1; }
+  .btn-del { position: absolute; top: 7px; right: 9px; background: none; border: none;
+             color: var(--muted); cursor: pointer; font-size: .9rem; line-height: 1; }
+  .btn-del:hover { color: var(--red); }
+
+  /* ── Settings toggle ── */
+  .settings-toggle { background: none; border: none; color: var(--muted); font-size: .78rem;
+                     cursor: pointer; padding: 6px 0; display: flex; align-items: center; gap: 5px; }
+  .settings-toggle:hover { color: var(--text); }
+  .settings-panel { display: none; background: var(--surface2); border: 1px solid var(--border);
+                    border-radius: 7px; padding: 10px; margin-bottom: 12px; }
+  .settings-panel.open { display: block; }
+  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .settings-grid .field { margin: 0; }
+
+  /* ── Sidebar footer ── */
+  .sidebar-footer { padding: 14px 20px 20px; border-top: 1px solid var(--border); flex-shrink: 0; }
+  .btn-analyze { width: 100%; padding: 11px; background: var(--accent); color: #fff; border: none;
+                 border-radius: 9px; font-size: .95rem; font-weight: 700; cursor: pointer;
+                 transition: opacity .2s, transform .1s; }
+  .btn-analyze:hover { opacity: .9; }
+  .btn-analyze:active { transform: scale(.98); }
+  .btn-analyze:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ── Analyzer main area ── */
+  .analyzer-scroll { flex: 1; overflow-y: auto; padding: 24px; }
+  .placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center;
+                 height: 100%; min-height: 360px; color: var(--muted); text-align: center; gap: 10px; }
+  .placeholder-icon { font-size: 3rem; opacity: .3; }
+  .placeholder p { font-size: .92rem; }
+
+  /* ── Progress ── */
+  #progress-area { display: none; }
+  .status-bar { background: var(--surface); border: 1px solid var(--border); border-radius: 9px;
+                padding: 12px 16px; margin-bottom: 18px; display: flex; align-items: center; gap: 10px; }
+  .spinner { width: 17px; height: 17px; border: 2px solid var(--border); border-top-color: var(--accent);
+             border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .status-text { font-size: .88rem; color: var(--muted); }
+
+  /* ── Site issues ── */
+  .section-title { font-size: .73rem; color: var(--muted); text-transform: uppercase;
+                   letter-spacing: .07em; margin-bottom: 9px; }
+  .issue-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px;
+                border-radius: 5px; font-size: .78rem; margin: 3px 3px 3px 0; }
+
+  /* ── Page cards ── */
+  #pages-area { display: none; }
+  .page-card { background: var(--surface); border: 1px solid var(--border); border-radius: 11px;
+               margin-bottom: 10px; overflow: hidden; }
+  .page-card-header { background: var(--surface2); padding: 11px 14px;
+                      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 7px;
+                      cursor: pointer; user-select: none; }
+  .page-card-header:hover { background: var(--surface3); }
+  .ph-left { display: flex; flex-direction: column; gap: 2px; }
+  .ph-label { font-weight: 700; font-size: .92rem; }
+  .ph-url { font-size: .72rem; color: var(--muted); }
+  .ph-right { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .score-badge { font-weight: 800; font-size: .95rem; }
+  .score-green { color: var(--green); }
+  .score-yellow { color: var(--yellow); }
+  .score-red { color: var(--red); }
+  .pill { background: var(--surface3); border-radius: 99px; padding: 2px 8px; font-size: .7rem; color: var(--muted); }
+  .pill.err { background: #3d0000; color: #ff8080; }
+  .pill.warn { background: #2d1800; color: #ffb347; }
+  .chevron { color: var(--muted); transition: transform .2s; font-size: .78rem; }
+  .chevron.open { transform: rotate(180deg); }
+  .page-card-body { display: none; padding: 12px 14px; border-top: 1px solid var(--border); }
+  .page-card-body.open { display: block; }
+  .cat-block { margin-bottom: 12px; }
+  .cat-name { font-size: .71rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
+  .issue-row { display: flex; gap: 7px; align-items: flex-start; padding: 7px 9px;
+               border-radius: 6px; margin-bottom: 3px; font-size: .83rem; }
+  .sev-badge { font-size: .6rem; font-weight: 800; padding: 2px 5px; border-radius: 3px;
+               white-space: nowrap; align-self: flex-start; margin-top: 1px; color: #000; }
+  .sev-error { background: var(--red); }
+  .sev-warning { background: var(--yellow); }
+  .sev-ok { background: var(--green); }
+  .sev-info { background: var(--blue); color: #fff; }
+  .issue-name { font-weight: 600; }
+  .issue-msg { color: var(--muted); margin-left: 3px; }
+  .issue-fix { font-size: .76rem; color: #a0cfff; margin-top: 2px; }
+
+  /* ── Summary ── */
+  #summary-area { display: none; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 14px 18px; }
+  .stat-num { font-size: 1.9rem; font-weight: 800; }
+  .stat-label { font-size: .73rem; color: var(--muted); margin-top: 2px; }
+  .bar-track { background: #333; border-radius: 99px; height: 7px; margin-top: 7px; overflow: hidden; }
+  .bar-fill { height: 7px; border-radius: 99px; transition: width 1s ease; }
+  .btn-report { display: inline-flex; align-items: center; gap: 7px; background: var(--accent);
+                color: #fff; padding: 9px 18px; border-radius: 7px; text-decoration: none;
+                font-weight: 700; font-size: .88rem; }
+  .btn-report:hover { opacity: .85; }
+
+  /* ══════════════════════════════════════
+     INSPECTOR
+  ═══════════════════════════════════════ */
+  /* Inspector sidebar */
+  .insp-sidebar { padding: 16px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+  .insp-sidebar .field { margin: 0; }
+  .insp-hint { font-size: .76rem; color: var(--muted); line-height: 1.5; }
+
+  /* Inspector main */
+  .insp-tabs { display: flex; flex-wrap: wrap; background: var(--surface2);
+               border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .insp-tab { padding: 7px 11px; border: none; background: none; color: var(--muted); font-size: .72rem;
+              font-family: inherit; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
+  .insp-tab:hover { color: var(--text); background: var(--surface3); }
+  .insp-tab.on { color: var(--accent); border-bottom-color: var(--accent); background: var(--surface); font-weight: 700; }
+  .insp-panel { flex: 1; overflow-y: auto; padding: 18px 20px; }
+  .insp-spin { display: flex; align-items: center; gap: 10px; color: var(--muted); padding: 20px 0; }
+  .insp-err { background: #2d0000; border: 1px solid var(--red); border-radius: 7px;
+              padding: 11px; color: #ff8080; font-size: .83rem; }
+  .insp-info { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+               padding: 9px 12px; font-size: .82rem; color: var(--blue); margin-bottom: 9px; }
+  .insp-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center;
+                      height: 100%; min-height: 300px; color: var(--muted); text-align: center; gap: 10px; }
+
+  /* Inspector result components */
+  .i-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+  .i-tag { font-size: .76rem; padding: 3px 8px; border-radius: 4px; font-weight: 600; }
+  .i-ok   { background: #f0fdf422; color: var(--green); border: 1px solid #4ade8033; }
+  .i-warn { background: #fffbeb22; color: var(--yellow); border: 1px solid #ffb34733; }
+  .i-bad  { background: #fef2f222; color: var(--red); border: 1px solid #ff4d4d33; }
+  .i-neu  { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+
+  .i-tree { border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .i-tree.scroll { max-height: 320px; overflow-y: auto; }
+  .i-row { display: flex; align-items: flex-start; gap: 7px; padding: 6px 11px;
+           border-bottom: 1px solid var(--surface3); font-size: .82rem; }
+  .i-row:last-child { border-bottom: none; }
+  .i-row:hover { background: var(--surface2); }
+
+  .i-sep { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em;
+           margin: 12px 0 5px; border-top: 1px solid var(--border); padding-top: 9px; font-weight: 700; }
+  .i-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 7px;
+            padding: 10px 12px; margin-bottom: 7px; }
+  .i-card-title { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
+                  margin-bottom: 4px; display: flex; justify-content: space-between; }
+  .i-card-val { font-size: .86rem; word-break: break-word; }
+
+  .i-grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-bottom: 10px; }
+  .i-grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 10px; }
+  .i-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 10px; }
+  .i-stat { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+            padding: 9px; text-align: center; }
+  .i-stat-num { font-size: 1.4rem; font-weight: 800; line-height: 1; }
+  .i-stat-lbl { font-size: .68rem; color: var(--muted); margin-top: 2px; text-transform: uppercase; }
+
+  .i-tbl { width: 100%; border-collapse: collapse; font-size: .8rem; }
+  .i-tbl th { font-size: .68rem; text-align: left; padding: 5px 7px; color: var(--muted);
+              text-transform: uppercase; border-bottom: 1px solid var(--border); }
+  .i-tbl td { padding: 5px 7px; border-bottom: 1px solid var(--surface3); vertical-align: top; word-break: break-word; }
+  .i-tbl tr:last-child td { border-bottom: none; }
+  .i-tbl tr:hover td { background: var(--surface2); }
+  .i-tbl-wrap { max-height: 280px; overflow-y: auto; border: 1px solid var(--border); border-radius: 7px; }
+
+  .hbadge { font-size: .63rem; font-weight: 800; padding: 2px 5px; border-radius: 3px;
+            min-width: 22px; text-align: center; flex-shrink: 0; }
+  .h1b { background: #e2e2f0; color: #111; }
+  .h2b { background: #555; color: #fff; }
+  .h3b { background: #888; color: #fff; }
+  .h4b, .h5b, .h6b { background: var(--surface3); color: var(--muted); }
+
+  .schema-item { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 7px; overflow: hidden; }
+  .schema-hdr { display: flex; justify-content: space-between; padding: 8px 11px;
+                background: var(--surface2); cursor: pointer; user-select: none; font-size: .83rem; }
+  .schema-hdr:hover { background: var(--surface3); }
+  .schema-body { padding: 9px 11px; font-family: monospace; font-size: .7rem; color: var(--muted);
+                 white-space: pre-wrap; border-top: 1px solid var(--border); display: none;
+                 max-height: 180px; overflow-y: auto; word-break: break-all; }
+  .schema-body.open { display: block; }
+
+  .bl-ok { color: var(--green); }
+  .bl-warn { color: var(--yellow); }
+  .bl-bad { color: var(--red); }
+
+  .og-preview { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+  .og-img { width: 100%; height: 120px; object-fit: cover; background: var(--surface2); display: block; }
+  .og-body { padding: 9px 11px; background: var(--surface2); }
+  .og-domain { font-size: .68rem; color: var(--muted); text-transform: uppercase; margin-bottom: 3px; }
+  .og-title { font-size: .88rem; font-weight: 700; margin-bottom: 3px; }
+  .og-desc { font-size: .8rem; color: var(--muted); }
+
+  .cwv-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 10px; }
+  .cwv-card { border-radius: 8px; padding: 11px 7px; text-align: center; border: 2px solid; }
+  .cwv-val { font-size: 1.3rem; font-weight: 800; line-height: 1; margin-bottom: 2px; }
+  .cwv-name { font-size: .68rem; font-weight: 700; text-transform: uppercase; margin-bottom: 2px; }
+  .cwv-range { font-size: .63rem; color: var(--muted); }
+  .cwv-good { background: #f0fdf411; border-color: var(--green); }
+  .cwv-good .cwv-val, .cwv-good .cwv-name { color: var(--green); }
+  .cwv-ni { background: #fffbeb11; border-color: var(--yellow); }
+  .cwv-ni .cwv-val, .cwv-ni .cwv-name { color: var(--yellow); }
+  .cwv-poor { background: #fef2f211; border-color: var(--red); }
+  .cwv-poor .cwv-val, .cwv-poor .cwv-name { color: var(--red); }
+  .cwv-na { background: var(--surface2); border-color: var(--border); }
+  .cwv-na .cwv-val, .cwv-na .cwv-name { color: var(--muted); }
+
+  .ps-ring { display: flex; align-items: center; justify-content: center;
+             width: 68px; height: 68px; border-radius: 50%; border: 5px solid;
+             font-size: 1.35rem; font-weight: 800; flex-shrink: 0; }
+  .ps-good { border-color: var(--green); color: var(--green); }
+  .ps-ni { border-color: var(--yellow); color: var(--yellow); }
+  .ps-bad { border-color: var(--red); color: var(--red); }
+
+  .kw-bar { background: var(--surface3); border-radius: 3px; height: 5px; flex-shrink: 0; }
+  .kw-fill { height: 100%; border-radius: 3px; background: var(--accent); }
+
+  .raw-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+             padding: 9px; font-family: monospace; font-size: .73rem; color: var(--muted);
+             max-height: 320px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; margin-top: 7px; }
+  .verdict { display: flex; align-items: center; gap: 11px; padding: 11px; border-radius: 7px;
+             margin-bottom: 9px; border: 1px solid; }
+  .v-ok { background: #f0fdf411; border-color: #4ade8033; }
+  .v-bad { background: #fef2f211; border-color: #ff4d4d33; }
+  .v-icon { font-size: 1.3rem; }
+  .v-label { font-size: .92rem; font-weight: 700; }
+
+  .fk-score { font-size: 2rem; font-weight: 800; line-height: 1; }
+
+  /* ── Settings overlay ── */
+  .settings-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6);
+                      z-index: 99; align-items: center; justify-content: center; }
+  .settings-overlay.on { display: flex; }
+  .settings-box { background: var(--surface); border: 1px solid var(--border); border-radius: 11px;
+                  padding: 20px; width: 360px; box-shadow: 0 8px 32px #0008; }
+  .settings-box h2 { font-size: .92rem; font-weight: 700; margin-bottom: 12px;
+                     display: flex; justify-content: space-between; align-items: center; }
+  .settings-close { background: none; border: none; cursor: pointer; font-size: 1rem; color: var(--muted); }
+  .settings-close:hover { color: var(--text); }
+  .settings-save { width: 100%; padding: 8px; border-radius: 7px; border: none; background: var(--accent);
+                   color: #fff; font-size: .88rem; font-weight: 700; cursor: pointer; margin-top: 6px; }
+  .settings-save:hover { opacity: .85; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+</style>
+</head>
+
+<!-- SETTINGS OVERLAY -->
+<div class="settings-overlay" id="settingsOverlay">
+  <div class="settings-box">
+    <h2>⚙️ API Ayarları <button class="settings-close" id="settingsClose">✕</button></h2>
+    <div style="margin-bottom:10px">
+      <label style="font-size:.73rem;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:4px">Google PageSpeed API Key</label>
+      <input type="text" id="psApiKey" placeholder="AIza... (opsiyonel)">
+      <div style="font-size:.7rem;color:var(--muted);margin-top:3px">PageSpeed sekmesi için gerekli. Google Cloud Console'dan ücretsiz alınır.</div>
+    </div>
+    <button class="settings-save" id="settingsSave">💾 Kaydet</button>
+  </div>
+</div>
+
+<body>
+<div class="app">
+
+  <!-- ═══ SIDEBAR ═══ -->
+  <aside class="sidebar">
+    <!-- Shared header -->
+    <div class="sidebar-header" style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div class="logo">SEO <span>Analyzer</span></div>
+        <div class="subtitle">Web sayfası analiz aracı</div>
+      </div>
+      <button id="settingsBtn" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem;padding:4px" title="API Ayarları">⚙️</button>
+    </div>
+
+    <!-- Mode switcher -->
+    <div class="mode-bar">
+      <button class="mode-btn on" id="modeBtnAnalyzer" onclick="switchMode('analyzer')">📊 Analyzer</button>
+      <button class="mode-btn" id="modeBtnInspector" onclick="switchMode('inspector')">🔍 Inspector</button>
+    </div>
+
+    <!-- Analyzer sidebar -->
+    <div class="mode-view on" id="analyzerSidebar">
+      <div class="form-body">
+        <div class="field">
+          <label>Site Adı</label>
+          <input type="text" id="site-name" placeholder="Örn: Şirketim">
+        </div>
+        <div class="field">
+          <label>Base URL</label>
+          <input type="text" id="base-url" placeholder="https://example.com">
+        </div>
+
+        <div class="pages-header">
+          <label>Sayfalar</label>
+          <button class="btn-add" onclick="addPage()">+ Ekle</button>
+        </div>
+        <div id="pages-list"></div>
+
+        <button class="settings-toggle" onclick="toggleSettings()">
+          <span id="settings-arrow">▶</span> Gelişmiş Ayarlar
+        </button>
+        <div class="settings-panel" id="settings-panel">
+          <div class="settings-grid">
+            <div class="field">
+              <label>Timeout (sn)</label>
+              <input type="text" id="s-timeout" value="30">
+            </div>
+            <div class="field">
+              <label>Playwright</label>
+              <select id="s-playwright">
+                <option value="auto">Auto</option>
+                <option value="always">Her zaman</option>
+                <option value="never">Hiçbir zaman</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <button class="btn-analyze" id="btn-analyze" onclick="startAnalysis()">Analizi Başlat</button>
+      </div>
+    </div>
+
+    <!-- Inspector sidebar -->
+    <div class="mode-view" id="inspectorSidebar">
+      <div class="insp-sidebar">
+        <div class="field">
+          <label>Analiz Edilecek URL</label>
+          <input type="text" id="insp-url" placeholder="https://example.com/sayfa"
+                 onkeydown="if(event.key==='Enter')inspectorGo()">
+        </div>
+        <button class="btn-analyze" onclick="inspectorGo()">Analiz Et</button>
+
+        <div style="border-top:1px solid var(--border);padding-top:12px">
+          <div style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Sekmeler</div>
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <button class="insp-sidenav on" data-tab="h" onclick="inspTab('h')">🏷️ Heading Yapısı</button>
+            <button class="insp-sidenav" data-tab="m" onclick="inspTab('m')">📄 Meta Etiketler</button>
+            <button class="insp-sidenav" data-tab="og" onclick="inspTab('og')">🌐 OG / Social</button>
+            <button class="insp-sidenav" data-tab="i" onclick="inspTab('i')">🖼️ Görseller</button>
+            <button class="insp-sidenav" data-tab="sc" onclick="inspTab('sc')">🗂️ Schema / LD+JSON</button>
+            <button class="insp-sidenav" data-tab="cv" onclick="inspTab('cv')">⚡ Core Web Vitals</button>
+            <button class="insp-sidenav" data-tab="ps" onclick="inspTab('ps')">📈 PageSpeed</button>
+            <button class="insp-sidenav" data-tab="bl" onclick="inspTab('bl')">🔗 Kırık Linkler</button>
+            <button class="insp-sidenav" data-tab="sm" onclick="inspTab('sm')">🗺️ Sitemap</button>
+            <button class="insp-sidenav" data-tab="w" onclick="inspTab('w')">🌍 WHOIS</button>
+            <button class="insp-sidenav" data-tab="o" onclick="inspTab('o')">📖 Okunabilirlik</button>
+            <button class="insp-sidenav" data-tab="k" onclick="inspTab('k')">🔑 Anahtar Kelimeler</button>
+            <button class="insp-sidenav" data-tab="r" onclick="inspTab('r')">🤖 robots.txt</button>
+            <button class="insp-sidenav" data-tab="f" onclick="inspTab('f')">🚀 Performans</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ═══ MAIN ═══ -->
+  <main class="main">
+
+    <!-- Analyzer main -->
+    <div class="mode-view on" id="analyzerMain">
+      <div class="analyzer-scroll">
+        <div class="placeholder" id="placeholder">
+          <div class="placeholder-icon">📊</div>
+          <p>Sol taraftan site bilgilerini girin<br>ve <strong>Analizi Başlat</strong> butonuna tıklayın.</p>
+        </div>
+        <div id="progress-area">
+          <div class="status-bar">
+            <div class="spinner" id="spinner"></div>
+            <div class="status-text" id="status-text">Analiz başlatılıyor...</div>
+          </div>
+          <div id="site-issues-area" style="margin-bottom:18px;display:none;">
+            <div class="section-title">Site Geneli Kontroller</div>
+            <div id="site-issues-chips"></div>
+          </div>
+        </div>
+        <div id="pages-area">
+          <div class="section-title" style="margin-bottom:10px;">Sayfa Sonuçları</div>
+          <div id="page-cards"></div>
+        </div>
+        <div id="summary-area">
+          <div class="section-title" style="margin-bottom:10px;">Özet</div>
+          <div class="summary-grid" id="summary-grid"></div>
+          <a href="/report" target="_blank" class="btn-report">HTML Raporunu Aç &rarr;</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inspector main -->
+    <div class="mode-view" id="inspectorMain">
+      <div class="insp-panel" id="inspPanel">
+        <div class="insp-placeholder">
+          <div style="font-size:2.5rem;opacity:.3">🔍</div>
+          <p style="font-size:.9rem">Sol taraftan bir URL girin ve <strong>Analiz Et</strong>'e tıklayın.</p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<style>
+  /* Inspector side nav buttons */
+  .insp-sidenav {
+    width: 100%; text-align: left; padding: 7px 10px; background: none;
+    border: 1px solid transparent; border-radius: 6px; color: var(--muted);
+    font-size: .8rem; font-family: inherit; cursor: pointer;
+  }
+  .insp-sidenav:hover { background: var(--surface2); color: var(--text); border-color: var(--border); }
+  .insp-sidenav.on { background: var(--surface2); color: var(--accent); border-color: var(--accent)44; font-weight: 700; }
+</style>
+
+<script>
+// ──────────────────────────────────────────────
+// MODE SWITCHING
+// ──────────────────────────────────────────────
+function switchMode(mode) {
+  const isAnalyzer = mode === 'analyzer';
+  document.getElementById('analyzerSidebar').classList.toggle('on', isAnalyzer);
+  document.getElementById('inspectorSidebar').classList.toggle('on', !isAnalyzer);
+  document.getElementById('analyzerMain').classList.toggle('on', isAnalyzer);
+  document.getElementById('inspectorMain').classList.toggle('on', !isAnalyzer);
+  document.getElementById('modeBtnAnalyzer').classList.toggle('on', isAnalyzer);
+  document.getElementById('modeBtnInspector').classList.toggle('on', !isAnalyzer);
+}
+
+// ──────────────────────────────────────────────
+// INSPECTOR
+// ──────────────────────────────────────────────
+let inspCurrentTab = 'h';
+let inspKwMode = 1;
+
+function inspTab(tab) {
+  inspCurrentTab = tab;
+  document.querySelectorAll('.insp-sidenav').forEach(b => b.classList.remove('on'));
+  const btn = document.querySelector(`.insp-sidenav[data-tab="${tab}"]`);
+  if (btn) btn.classList.add('on');
+
+  const url = (document.getElementById('insp-url').value || '').trim();
+  if (url) fetchInspector(url, tab);
+}
+
+function inspectorGo() {
+  const url = (document.getElementById('insp-url').value || '').trim();
+  if (!url) { document.getElementById('insp-url').focus(); return; }
+  fetchInspector(url, inspCurrentTab);
+}
+
+async function fetchInspector(url, tab) {
+  const panel = document.getElementById('inspPanel');
+  panel.innerHTML = '<div class="insp-spin"><div class="spinner"></div> Analiz ediliyor...</div>';
+
+  const body = { url, tab };
+  if (tab === 'k') body.mode = inspKwMode;
+  if (tab === 'ps') {
+    body.apiKey = localStorage.getItem('psApiKey') || '';
+    body.strategy = 'mobile';
+    if (!body.apiKey) {
+      panel.innerHTML = '<div class="insp-err">⚠️ PageSpeed için API key gerekli. Üst sağdaki ⚙️ ikonuna tıklayın.</div>';
+      return;
+    }
+  }
+
+  try {
+    const res = await fetch('/api/inspect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.error) {
+      panel.innerHTML = `<div class="insp-err">⚠️ ${esc(data.error)}</div>`;
+      return;
+    }
+    renderInspTab(tab, data, panel);
+  } catch (e) {
+    panel.innerHTML = `<div class="insp-err">⚠️ Bağlantı hatası: ${esc(e.message)}</div>`;
+  }
+}
+
+function renderInspTab(tab, data, panel) {
+  const fns = { h: renderHeadings, m: renderMeta, og: renderOG, i: renderImages,
+                sc: renderSchema, cv: renderCWV, ps: renderPageSpeed, bl: renderBrokenLinks,
+                sm: renderSitemap, w: renderWhois, o: renderReadability, k: renderKeywords,
+                r: renderRobots, f: renderPerformance };
+  const fn = fns[tab];
+  if (!fn) return;
+  panel.innerHTML = fn(data);
+  if (tab === 'sc') {
+    panel.querySelectorAll('.schema-hdr').forEach(h => {
+      h.onclick = () => h.nextElementSibling.classList.toggle('open');
+    });
+  }
+}
+
+// ── 1. Headings ──────────────────────────────
+function renderHeadings(d) {
+  const headings = d.headings || [];
+  const counts = [1,2,3,4,5,6].map(n => {
+    const c = headings.filter(h => h.level === n).length;
+    return `<div class="i-stat"><div class="i-stat-num">${c}</div><div class="i-stat-lbl">H${n}</div></div>`;
+  }).join('');
+
+  const issueTags = (d.issues || []).map(i => {
+    const cls = i.cls === 'bad' ? 'i-bad' : i.cls === 'ok' ? 'i-ok' : 'i-warn';
+    return `<span class="i-tag ${cls}">${esc(i.t)}</span>`;
+  }).join('');
+
+  const hbadges = ['h1b','h2b','h3b','h4b','h5b','h6b'];
+  const rows = headings.map(h => {
+    const indent = (h.level - 1) * 10;
+    return `<div class="i-row">
+      <span class="hbadge ${hbadges[h.level-1]||'h6b'}">H${h.level}</span>
+      <span style="margin-left:${indent}px;flex:1">${esc(h.text)}</span>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="i-grid4" style="margin-bottom:12px">${counts}</div>
+    ${issueTags ? `<div class="i-tags">${issueTags}</div>` : ''}
+    ${rows ? `<div class="i-tree scroll" style="margin-top:8px">${rows}</div>` : '<div class="insp-info">Başlık bulunamadı.</div>'}
+  `;
+}
+
+// ── 2. Meta ──────────────────────────────────
+function renderMeta(d) {
+  const titleLen = (d.title || '').length;
+  const descLen = (d.desc || '').length;
+
+  const items = [
+    { label: 'Title', value: d.title, note: d.title ? `${titleLen} karakter` : null,
+      status: !d.title ? 'bad' : (titleLen < 30 || titleLen > 60) ? 'warn' : 'ok' },
+    { label: 'Description', value: d.desc, note: d.desc ? `${descLen} karakter` : null,
+      status: !d.desc ? 'bad' : (descLen < 50 || descLen > 160) ? 'warn' : 'ok' },
+    { label: 'Canonical', value: d.canonical || '—',
+      status: d.canonical ? 'ok' : 'warn' },
+    { label: 'Robots Direktifi', value: d.robots || '(belirtilmemiş)',
+      status: 'neu' },
+    { label: 'HTML Lang', value: d.lang || '—',
+      status: d.lang ? 'ok' : 'warn' },
+    { label: 'Viewport', value: d.viewport || '—',
+      status: d.viewport ? 'ok' : 'bad' },
+  ];
+
+  const stats = `<div class="i-grid2" style="margin-bottom:12px">
+    <div class="i-stat"><div class="i-stat-num">${d.h1_count ?? '—'}</div><div class="i-stat-lbl">H1 Sayısı</div></div>
+    <div class="i-stat"><div class="i-stat-num">${d.word_count ?? '—'}</div><div class="i-stat-lbl">Kelime Sayısı</div></div>
+  </div>`;
+
+  return stats + items.map(item => `
+    <div class="i-card">
+      <div class="i-card-title">
+        <span>${esc(item.label)}</span>
+        ${item.note ? `<span>${esc(item.note)}</span>` : ''}
+      </div>
+      <div class="i-card-val" style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+        <span class="i-tag i-${item.status}">${item.status === 'ok' ? 'OK' : item.status === 'warn' ? 'UYARI' : item.status === 'bad' ? 'HATA' : 'BİLGİ'}</span>
+        <span>${esc(item.value || '—')}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── 3. OG / Social ───────────────────────────
+function renderOG(d) {
+  const ogFields = [
+    ['og:title', d.ogTitle], ['og:description', d.ogDesc], ['og:image', d.ogImage],
+    ['og:url', d.ogUrl], ['og:type', d.ogType], ['og:site_name', d.ogSite],
+  ].filter(([, v]) => v);
+
+  const twFields = [
+    ['twitter:card', d.twCard], ['twitter:title', d.twTitle], ['twitter:description', d.twDesc],
+    ['twitter:image', d.twImage], ['twitter:site', d.twSite], ['twitter:creator', d.twCreator],
+  ].filter(([, v]) => v);
+
+  let preview = '';
+  if (d.ogTitle || d.ogDesc) {
+    preview = `<div class="og-preview">
+      ${d.ogImage ? `<img class="og-img" src="${esc(d.ogImage)}" onerror="this.style.display='none'" loading="lazy">` : ''}
+      <div class="og-body">
+        <div class="og-domain">${esc(d.ogSite || d.ogUrl || '')}</div>
+        <div class="og-title">${esc(d.ogTitle || '')}</div>
+        <div class="og-desc">${esc(d.ogDesc || '')}</div>
+      </div>
+    </div>`;
+  }
+
+  const makeTable = rows => `<div class="i-tbl-wrap"><table class="i-tbl">
+    <thead><tr><th>Property</th><th>Content</th></tr></thead>
+    <tbody>${rows.map(([k,v]) => `<tr><td style="color:var(--muted);white-space:nowrap">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</tbody>
+  </table></div>`;
+
+  return preview
+    + (ogFields.length ? `<div class="i-sep">Open Graph</div>${makeTable(ogFields)}` : '<div class="insp-info">OG tag bulunamadı.</div>')
+    + (twFields.length ? `<div class="i-sep">Twitter Card</div>${makeTable(twFields)}` : '');
+}
+
+// ── 4. Images ────────────────────────────────
+function renderImages(d) {
+  const imgs = d.images || [];
+  if (!imgs.length) return '<div class="insp-info">Görsel bulunamadı.</div>';
+
+  const noAlt = imgs.filter(i => i.alt === null || i.alt === undefined).length;
+  const emptyAlt = imgs.filter(i => i.alt === '').length;
+  const lazyCount = imgs.filter(i => i.loading === 'lazy').length;
+
+  const stats = `<div class="i-grid4" style="margin-bottom:10px">
+    <div class="i-stat"><div class="i-stat-num">${imgs.length}</div><div class="i-stat-lbl">Toplam</div></div>
+    <div class="i-stat"><div class="i-stat-num" style="color:${noAlt ? 'var(--red)' : 'var(--green)'}">${noAlt}</div><div class="i-stat-lbl">Alt Yok</div></div>
+    <div class="i-stat"><div class="i-stat-num" style="color:${emptyAlt ? 'var(--yellow)' : 'var(--muted)'}">${emptyAlt}</div><div class="i-stat-lbl">Alt Boş</div></div>
+    <div class="i-stat"><div class="i-stat-num">${lazyCount}</div><div class="i-stat-lbl">Lazy</div></div>
+  </div>`;
+
+  const rows = imgs.map(img => {
+    const altBadge = (img.alt === null || img.alt === undefined)
+      ? '<span class="i-tag i-bad">ALT YOK</span>'
+      : img.alt === ''
+        ? '<span class="i-tag i-warn">ALT BOŞ</span>'
+        : `<span class="i-tag i-ok">ALT ✓</span>`;
+    const lazy = img.loading === 'lazy' ? '<span class="i-tag i-neu">lazy</span>' : '';
+    const src = img.src || '';
+    const fname = src.split('/').pop().split('?')[0].slice(0, 45) || src.slice(0, 45);
+    return `<div class="i-row" style="align-items:center">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(src)}">${esc(fname)}</div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0">${altBadge}${lazy}</div>
+    </div>`;
+  }).join('');
+
+  return stats + `<div class="i-tree scroll">${rows}</div>`;
+}
+
+// ── 5. Schema ────────────────────────────────
+function renderSchema(d) {
+  const schemas = d.schemas || [];
+  if (!schemas.length) return '<div class="insp-info">Yapısal veri (Schema.org / JSON-LD) bulunamadı.</div>';
+
+  return `<div class="i-tags" style="margin-bottom:10px">
+    <span class="i-tag i-ok">${schemas.length} Schema Bulundu</span>
+  </div>` + schemas.map(s => {
+    return `<div class="schema-item">
+      <div class="schema-hdr">
+        <span>${esc(s.types || 'Schema')} <span style="color:var(--muted);font-size:.72rem">[${esc(s.source || 'JSON-LD')}]</span></span>
+        <span style="font-size:.8rem">▼</span>
+      </div>
+      <div class="schema-body">${esc(s.raw || '')}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── 6. Core Web Vitals ───────────────────────
+function renderCWV(d) {
+  if (d.error) return `<div class="insp-err">⚠️ ${esc(d.error)}<br><small style="color:var(--muted)">Core Web Vitals için Playwright gereklidir.</small></div>`;
+
+  const metrics = [
+    { key: 'lcp', name: 'LCP', good: 2500, ni: 4000, fmt: v => (v/1000).toFixed(2)+'s', range: '&lt;2.5s / &lt;4s' },
+    { key: 'fcp', name: 'FCP', good: 1800, ni: 3000, fmt: v => (v/1000).toFixed(2)+'s', range: '&lt;1.8s / &lt;3s' },
+    { key: 'ttfb', name: 'TTFB', good: 800, ni: 1800, fmt: v => v+'ms', range: '&lt;800ms / &lt;1.8s' },
+    { key: 'cls', name: 'CLS', good: 0.1, ni: 0.25, fmt: v => v, range: '&lt;0.1 / &lt;0.25' },
+    { key: 'fid', name: 'FID', good: 100, ni: 300, fmt: v => v+'ms', range: '&lt;100ms / &lt;300ms' },
+    { key: 'domLoad', name: 'DOM', good: 2000, ni: 4000, fmt: v => (v/1000).toFixed(2)+'s', range: '&lt;2s / &lt;4s' },
+  ];
+
+  const cards = metrics.map(m => {
+    const val = d[m.key];
+    if (val === null || val === undefined) {
+      return `<div class="cwv-card cwv-na"><div class="cwv-val">—</div><div class="cwv-name">${m.name}</div><div class="cwv-range">N/A</div></div>`;
+    }
+    const cls = val <= m.good ? 'cwv-good' : val <= m.ni ? 'cwv-ni' : 'cwv-poor';
+    const label = val <= m.good ? 'İyi' : val <= m.ni ? 'Orta' : 'Zayıf';
+    return `<div class="cwv-card ${cls}"><div class="cwv-val">${m.fmt(val)}</div><div class="cwv-name">${m.name}</div><div class="cwv-range">${label}</div></div>`;
+  }).join('');
+
+  return `<div class="cwv-grid">${cards}</div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:4px">Eşik değerler: İyi / Geliştirilebilir. Gerçek kullanıcı verisi için Google Search Console kullanın.</div>`;
+}
+
+// ── 7. PageSpeed ─────────────────────────────
+function renderPageSpeed(d) {
+  if (d.error && typeof d.error === 'string') return `<div class="insp-err">⚠️ ${esc(d.error)}</div>`;
+  if (d.error && d.error.message) return `<div class="insp-err">⚠️ ${esc(d.error.message)}</div>`;
+
+  const lr = d.lighthouseResult;
+  if (!lr) return '<div class="insp-err">⚠️ Geçersiz PageSpeed yanıtı.</div>';
+
+  const score = Math.round((lr.categories?.performance?.score || 0) * 100);
+  const ringCls = score >= 90 ? 'ps-good' : score >= 50 ? 'ps-ni' : 'ps-bad';
+
+  const audits = lr.audits || {};
+  const coreMetrics = [
+    ['First Contentful Paint', audits['first-contentful-paint']?.displayValue],
+    ['Speed Index', audits['speed-index']?.displayValue],
+    ['Largest Contentful Paint', audits['largest-contentful-paint']?.displayValue],
+    ['Time to Interactive', audits['interactive']?.displayValue],
+    ['Total Blocking Time', audits['total-blocking-time']?.displayValue],
+    ['Cumulative Layout Shift', audits['cumulative-layout-shift']?.displayValue],
+  ].filter(([, v]) => v);
+
+  const opps = Object.values(audits)
+    .filter(a => a.details?.type === 'opportunity' && a.score !== null && a.score < 0.9 && a.title)
+    .slice(0, 6);
+
+  return `
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
+      <div class="ps-ring ${ringCls}">${score}</div>
+      <div>
+        <div style="font-size:1rem;font-weight:700">Performance Skoru</div>
+        <div style="font-size:.78rem;color:var(--muted)">${esc(d.id || '')}</div>
+      </div>
+    </div>
+    ${coreMetrics.length ? `
+      <div class="i-sep">Core Metrikler</div>
+      <div class="i-tbl-wrap"><table class="i-tbl">
+        <thead><tr><th>Metrik</th><th>Değer</th></tr></thead>
+        <tbody>${coreMetrics.map(([k,v]) => `<tr><td>${esc(k)}</td><td style="font-weight:700">${esc(v)}</td></tr>`).join('')}</tbody>
+      </table></div>` : ''}
+    ${opps.length ? `
+      <div class="i-sep">İyileştirme Fırsatları</div>
+      ${opps.map(a => `<div class="i-card">
+        <div class="i-card-title"><span>${esc(a.title)}</span><span style="color:var(--yellow)">${esc(a.displayValue||'')}</span></div>
+        <div class="i-card-val" style="color:var(--muted);font-size:.78rem">${esc(a.description||'')}</div>
+      </div>`).join('')}` : ''}
+  `;
+}
+
+// ── 8. Broken Links ──────────────────────────
+function renderBrokenLinks(d) {
+  const links = d.links || [];
+  if (!links.length) return '<div class="insp-info">Sayfa üzerinde hiç link bulunamadı.</div>';
+
+  const broken = links.filter(l => l.status === 0 || l.status >= 400).length;
+  const warn = links.filter(l => l.status >= 300 && l.status < 400).length;
+
+  const stats = `<div class="i-grid3" style="margin-bottom:10px">
+    <div class="i-stat"><div class="i-stat-num">${links.length}</div><div class="i-stat-lbl">Toplam</div></div>
+    <div class="i-stat"><div class="i-stat-num" style="color:${broken ? 'var(--red)' : 'var(--green)'}">${broken}</div><div class="i-stat-lbl">Kırık</div></div>
+    <div class="i-stat"><div class="i-stat-num" style="color:${warn ? 'var(--yellow)' : 'var(--muted)'}">${warn}</div><div class="i-stat-lbl">Yönlendirme</div></div>
+  </div>`;
+
+  const rows = links.map(l => {
+    const sc = l.status || 0;
+    const isBroken = sc === 0 || sc >= 400;
+    const isWarn = sc >= 300 && sc < 400;
+    const cls = isBroken ? 'bl-bad' : isWarn ? 'bl-warn' : 'bl-ok';
+    const label = sc === 0 ? 'ERR' : sc;
+    const short = (l.url || '').replace(/^https?:\/\//, '').slice(0, 65);
+    return `<div class="i-row" style="align-items:center">
+      <span class="${cls}" style="font-weight:800;flex-shrink:0;min-width:38px;font-size:.78rem">${label}</span>
+      <span style="flex:1;font-size:.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(l.url)}">${esc(short)}</span>
+    </div>`;
+  }).join('');
+
+  return stats + `<div class="i-tree scroll">${rows}</div>`;
+}
+
+// ── 9. Sitemap ───────────────────────────────
+function renderSitemap(d) {
+  if (d.error && !d.entries) {
+    return `<div class="verdict v-bad"><span class="v-icon">❌</span>
+      <div><div class="v-label">Sitemap Yüklenemedi</div>
+      <div style="font-size:.78rem;color:var(--muted)">${esc(d.error)}</div></div></div>`;
+  }
+
+  const entries = d.entries || [];
+  const isIndex = d.type === 'index';
+
+  const header = `<div class="verdict v-ok"><span class="v-icon">✅</span>
+    <div>
+      <div class="v-label">${isIndex ? 'Sitemap Index Bulundu' : 'Sitemap Bulundu'}</div>
+      ${d.url ? `<div style="font-size:.76rem;color:var(--muted)">${esc(d.url)}</div>` : ''}
+    </div>
+  </div>`;
+
+  const stats = `<div class="i-stat" style="margin-bottom:10px;text-align:left;padding:9px 12px;display:inline-block">
+    <span style="font-size:1.2rem;font-weight:800">${entries.length}</span>
+    <span style="font-size:.76rem;color:var(--muted);margin-left:5px">${isIndex ? 'alt sitemap' : 'URL'}</span>
+  </div>`;
+
+  const rows = entries.slice(0, 60).map(e => {
+    const loc = isIndex ? e.loc : e.loc;
+    const meta = isIndex ? (e.lm || '') : [e.lm, e.pri, e.chf].filter(Boolean).join(' · ');
+    return `<div class="i-row" style="flex-direction:column;gap:1px">
+      <span style="font-size:.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(loc || '—')}</span>
+      ${meta ? `<span style="font-size:.68rem;color:var(--muted)">${esc(meta)}</span>` : ''}
+    </div>`;
+  }).join('');
+
+  return header + stats
+    + (rows ? `<div class="i-sep">URL Listesi (ilk 60)</div><div class="i-tree scroll">${rows}</div>` : '');
+}
+
+// ── 10. WHOIS ────────────────────────────────
+function renderWhois(d) {
+  if (d.error) return `<div class="insp-err">⚠️ ${esc(d.error)}</div>`;
+
+  const events = {};
+  (d.events || []).forEach(ev => { events[ev.eventAction] = ev.eventDate; });
+
+  let registrar = '—';
+  (d.entities || []).forEach(ent => {
+    if ((ent.roles || []).includes('registrar')) {
+      const vcard = ent.vcardArray && ent.vcardArray[1];
+      if (vcard) {
+        const fn = vcard.find(v => v[0] === 'fn');
+        if (fn) registrar = fn[3];
+      }
+      if (registrar === '—' && ent.handle) registrar = ent.handle;
+    }
+  });
+
+  const ns = (d.nameservers || []).map(n => n.ldhName || n.unicodeName).filter(Boolean);
+  const status = (d.status || []).join(', ');
+
+  const fmt = v => {
+    if (!v) return null;
+    try { return new Date(v).toLocaleString('tr-TR'); } catch { return v; }
+  };
+
+  const fields = [
+    ['Alan Adı', d.ldhName || d.handle],
+    ['Tescil Eden', registrar],
+    ['Kayıt Tarihi', fmt(events['registration'])],
+    ['Bitiş Tarihi', fmt(events['expiration'])],
+    ['Son Güncelleme', fmt(events['last changed'])],
+    ['Durum', status],
+    ['Name Servers', ns.length ? ns.join(', ') : null],
+  ].filter(([, v]) => v);
+
+  if (!fields.length) return '<div class="insp-info">RDAP/WHOIS verisi alınamadı.</div>';
+
+  return fields.map(([k, v]) => `
+    <div class="i-card">
+      <div class="i-card-title">${esc(k)}</div>
+      <div class="i-card-val">${esc(String(v))}</div>
+    </div>
+  `).join('');
+}
+
+// ── 11. Readability ──────────────────────────
+function renderReadability(d) {
+  if (d.error) return `<div class="insp-err">⚠️ ${esc(d.error)}</div>`;
+
+  const fk = d.fk ?? 0;
+  const barColor = fk >= 60 ? 'var(--green)' : fk >= 30 ? 'var(--yellow)' : 'var(--red)';
+  const grade = fk >= 90 ? 'Çok Kolay' : fk >= 80 ? 'Kolay' : fk >= 70 ? 'Oldukça Kolay'
+    : fk >= 60 ? 'Orta' : fk >= 50 ? 'Oldukça Güç' : fk >= 30 ? 'Güç' : 'Çok Güç';
+
+  const top = (d.sentences || []).slice(0, 3);
+
+  return `
+    <div class="i-card" style="margin-bottom:12px">
+      <div class="i-card-title">Flesch Okunabilirlik Skoru</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
+        <div class="fk-score" style="color:${barColor}">${fk}</div>
+        <div style="flex:1">
+          <div style="font-size:.85rem;font-weight:600">${grade}</div>
+          <div class="bar-track" style="margin-top:5px"><div class="bar-fill" style="width:${Math.min(100,fk)}%;background:${barColor}"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="i-grid3">
+      <div class="i-stat"><div class="i-stat-num">${d.wc ?? '—'}</div><div class="i-stat-lbl">Kelime</div></div>
+      <div class="i-stat"><div class="i-stat-num">${d.sc ?? '—'}</div><div class="i-stat-lbl">Cümle</div></div>
+      <div class="i-stat"><div class="i-stat-num">${d.avg_len ?? '—'}</div><div class="i-stat-lbl">Ort. Uzunluk</div></div>
+    </div>
+    <div class="i-stat" style="margin-bottom:12px;text-align:left;padding:9px 12px">
+      <span style="font-size:1rem;font-weight:700">${d.read_min ?? '—'} dk</span>
+      <span style="font-size:.76rem;color:var(--muted);margin-left:5px">okuma süresi</span>
+    </div>
+    ${top.length ? `<div class="i-sep">Uzun Cümleler (örnek)</div>
+      ${top.map(s => `<div class="i-card" style="margin-bottom:5px"><div class="i-card-val" style="font-size:.8rem;color:var(--muted)">${esc(s)}</div></div>`).join('')}` : ''}
+  `;
+}
+
+// ── 12. Keywords ─────────────────────────────
+function renderKeywords(d) {
+  const kws = d.keywords || [];
+
+  const toggle = `<div style="display:flex;gap:6px;margin-bottom:10px">
+    <button onclick="inspKwMode=1;inspectorGo()" style="padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:${inspKwMode===1?'var(--accent)':'var(--surface2)'};color:${inspKwMode===1?'#fff':'var(--muted)'};cursor:pointer;font-size:.78rem">Tek Kelime</button>
+    <button onclick="inspKwMode=2;inspectorGo()" style="padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:${inspKwMode===2?'var(--accent)':'var(--surface2)'};color:${inspKwMode===2?'#fff':'var(--muted)'};cursor:pointer;font-size:.78rem">İki Kelime (Bigram)</button>
+  </div>`;
+
+  if (!kws.length) return toggle + '<div class="insp-info">Anahtar kelime bulunamadı.</div>';
+
+  const max = kws[0]?.count || 1;
+  const rows = kws.slice(0, 30).map((k, i) => {
+    const pct = Math.round((k.count / max) * 100);
+    return `<div class="i-row" style="align-items:center;gap:8px">
+      <span style="color:var(--muted);font-size:.7rem;min-width:18px;text-align:right">${i+1}</span>
+      <span style="flex:1;font-size:.83rem;font-weight:600">${esc(k.word)}</span>
+      <span style="color:var(--muted);font-size:.76rem;min-width:28px;text-align:right">${k.count}</span>
+      <div class="kw-bar" style="width:80px"><div class="kw-fill" style="width:${pct}%"></div></div>
+      <span style="color:var(--muted);font-size:.7rem;min-width:34px">%${k.pct}</span>
+    </div>`;
+  }).join('');
+
+  return toggle + `<div class="i-tree scroll">${rows}</div>`;
+}
+
+// ── 13. robots.txt ───────────────────────────
+function renderRobots(d) {
+  const found = d.status === 200;
+
+  const header = `<div class="verdict ${found ? 'v-ok' : 'v-bad'}">
+    <span class="v-icon">${found ? '✅' : '❌'}</span>
+    <div>
+      <div class="v-label">${found ? 'robots.txt Bulundu' : `robots.txt Bulunamadı (HTTP ${d.status||0})`}</div>
+      ${d.url ? `<div style="font-size:.76rem;color:var(--muted)">${esc(d.url)}</div>` : ''}
+    </div>
+  </div>`;
+
+  if (!found || !d.text) return header;
+
+  const lines = d.text.split('\n');
+  const rules = [];
+  let currentAgent = null;
+  lines.forEach(line => {
+    const l = line.trim();
+    if (!l || l.startsWith('#')) return;
+    const [k, ...rest] = l.split(':');
+    const v = rest.join(':').trim();
+    if (k.toLowerCase() === 'user-agent') currentAgent = v;
+    else if (currentAgent !== null) rules.push({ agent: currentAgent, dir: k, val: v });
+  });
+
+  const ruleRows = rules.slice(0, 30).map(r =>
+    `<div class="i-row">
+      <span style="color:var(--muted);font-size:.75rem;min-width:80px;flex-shrink:0">${esc(r.agent)}</span>
+      <span style="font-weight:600;font-size:.8rem;min-width:60px;flex-shrink:0;color:${r.dir.toLowerCase()==='disallow'?'var(--red)':r.dir.toLowerCase()==='allow'?'var(--green)':'var(--muted)'}">${esc(r.dir)}</span>
+      <span style="font-size:.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.val)}</span>
+    </div>`
+  ).join('');
+
+  return header
+    + (ruleRows ? `<div class="i-sep">Kurallar (ilk 30)</div><div class="i-tree scroll">${ruleRows}</div>` : '')
+    + `<div class="i-sep">Ham İçerik</div><div class="raw-box">${esc(d.text.slice(0, 3000))}</div>`;
+}
+
+// ── 14. Performance ──────────────────────────
+function renderPerformance(d) {
+  if (d.error) return `<div class="insp-err">⚠️ ${esc(d.error)}<br><small style="color:var(--muted)">Performans analizi için Playwright gereklidir.</small></div>`;
+
+  const timing = [
+    ['TTFB', d.ttfb, 'ms', 800, 1800],
+    ['DOM Ready', d.domReady, 'ms', 2000, 4000],
+    ['Sayfa Yüklendi', d.loadTime, 'ms', 3000, 6000],
+  ].filter(([, v]) => v !== null && v !== undefined);
+
+  const transfer = d.totalTransfer ? Math.round(d.totalTransfer / 1024) : null;
+  const docSize = d.transferSize ? Math.round(d.transferSize / 1024) : null;
+
+  const timingRows = timing.map(([label, val, unit, good, ni]) => {
+    const pct = Math.min(100, Math.round((val / ni) * 100));
+    const color = val <= good ? 'var(--green)' : val <= ni ? 'var(--yellow)' : 'var(--red)';
+    return `<div class="i-row" style="align-items:center;gap:10px">
+      <span style="flex:1;font-size:.82rem">${esc(label)}</span>
+      <span style="font-weight:700;color:${color};min-width:65px;text-align:right">${val}${unit}</span>
+      <div class="kw-bar" style="width:80px"><div class="kw-fill" style="width:${pct}%;background:${color}"></div></div>
+    </div>`;
+  }).join('');
+
+  const byType = d.byType || {};
+  const typeRows = Object.entries(byType).sort((a, b) => b[1].size - a[1].size).map(([type, info]) => {
+    const kb = Math.round(info.size / 1024);
+    return `<tr><td>${esc(type)}</td><td>${info.count}</td><td>${kb} KB</td></tr>`;
+  }).join('');
+
+  const top = (d.topResources || []).slice(0, 10);
+  const topRows = top.map(r => {
+    const kb = Math.round((r.size || 0) / 1024);
+    return `<div class="i-row" style="align-items:center;gap:8px">
+      <span style="color:var(--muted);font-size:.7rem;min-width:36px;flex-shrink:0">${esc(r.type||'')}</span>
+      <span style="flex:1;font-size:.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.fullUrl||'')}">${esc(r.name||'')}</span>
+      <span style="font-size:.76rem;color:var(--muted);flex-shrink:0">${kb}KB</span>
+      <span style="font-size:.76rem;color:var(--muted);flex-shrink:0">${r.duration||0}ms</span>
+    </div>`;
+  }).join('');
+
+  return `
+    ${timing.length ? `<div class="i-tree" style="margin-bottom:12px">${timingRows}</div>` : ''}
+    ${transfer !== null || docSize !== null ? `<div class="i-grid2" style="margin-bottom:12px">
+      ${docSize !== null ? `<div class="i-stat"><div class="i-stat-num">${docSize}</div><div class="i-stat-lbl">Doc KB</div></div>` : ''}
+      ${transfer !== null ? `<div class="i-stat"><div class="i-stat-num">${transfer}</div><div class="i-stat-lbl">Toplam KB</div></div>` : ''}
+    </div>` : ''}
+    ${typeRows ? `<div class="i-sep">Kaynak Türlerine Göre</div>
+      <div class="i-tbl-wrap"><table class="i-tbl">
+        <thead><tr><th>Tür</th><th>Adet</th><th>Boyut</th></tr></thead>
+        <tbody>${typeRows}</tbody>
+      </table></div>` : ''}
+    ${topRows ? `<div class="i-sep">En Büyük Kaynaklar</div><div class="i-tree scroll">${topRows}</div>` : ''}
+  `;
+}
+
+// ──────────────────────────────────────────────
+// SETTINGS
+// ──────────────────────────────────────────────
+document.getElementById('settingsBtn').onclick = () => {
+  document.getElementById('settingsOverlay').classList.add('on');
+  document.getElementById('psApiKey').value = localStorage.getItem('psApiKey') || '';
+};
+document.getElementById('settingsClose').onclick = () =>
+  document.getElementById('settingsOverlay').classList.remove('on');
+document.getElementById('settingsSave').onclick = () => {
+  localStorage.setItem('psApiKey', document.getElementById('psApiKey').value.trim());
+  document.getElementById('settingsOverlay').classList.remove('on');
+};
+document.getElementById('settingsOverlay').onclick = e => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('on');
+};
+
+// ──────────────────────────────────────────────
+// ANALYZER
+// ──────────────────────────────────────────────
+const PAGE_TYPES = ["home","blog_list","blog_detail","service_list","service_detail","contact","about","default"];
+const defaultPages = [{ url: "/", label: "Anasayfa", type: "home" }];
+
+window.onload = () => { defaultPages.forEach(p => addPage(p)); };
+
+let pageCount = 0;
+function addPage(data = {}) {
+  pageCount++;
+  const id = pageCount;
+  const div = document.createElement("div");
+  div.className = "page-row";
+  div.id = `page-row-${id}`;
+  const typeOpts = PAGE_TYPES.map(t =>
+    `<option value="${t}" ${(data.type || "default") === t ? "selected" : ""}>${t}</option>`
+  ).join("");
+  div.innerHTML = `
+    <button class="btn-del" onclick="removePage(${id})" title="Kaldır">✕</button>
+    <div class="url-row">
+      <input type="text" placeholder="/sayfa-url" value="${esc(data.url || '')}" id="p-url-${id}">
+    </div>
+    <input type="text" placeholder="Etiket" value="${esc(data.label || '')}" id="p-label-${id}">
+    <select id="p-type-${id}">${typeOpts}</select>
+  `;
+  document.getElementById("pages-list").appendChild(div);
+}
+
+function removePage(id) {
+  const el = document.getElementById(`page-row-${id}`);
+  if (el) el.remove();
+}
+
+function toggleSettings() {
+  const panel = document.getElementById("settings-panel");
+  const arrow = document.getElementById("settings-arrow");
+  panel.classList.toggle("open");
+  arrow.textContent = panel.classList.contains("open") ? "▼" : "▶";
+}
+
+function buildConfig() {
+  const siteName = document.getElementById("site-name").value.trim();
+  const baseUrl = document.getElementById("base-url").value.trim();
+  if (!siteName || !baseUrl) { alert("Site adı ve URL zorunludur."); return null; }
+
+  const pages = [];
+  document.querySelectorAll(".page-row").forEach(row => {
+    const id = row.id.replace("page-row-", "");
+    const url = document.getElementById(`p-url-${id}`)?.value.trim();
+    const label = document.getElementById(`p-label-${id}`)?.value.trim();
+    const type = document.getElementById(`p-type-${id}`)?.value;
+    if (url) pages.push({ url, label: label || url, type: type || "default" });
+  });
+  if (!pages.length) { alert("En az bir sayfa ekleyin."); return null; }
+
+  return {
+    site_name: siteName,
+    base_url: baseUrl,
+    pages,
+    settings: {
+      timeout: parseInt(document.getElementById("s-timeout").value) || 30,
+      use_playwright: document.getElementById("s-playwright").value,
+      user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    },
+    min_word_count: { home: 400, blog_detail: 600, service_detail: 500, blog_list: 200, contact: 100, default: 300 },
+  };
+}
+
+async function startAnalysis() {
+  const cfg = buildConfig();
+  if (!cfg) return;
+
+  document.getElementById("placeholder").style.display = "none";
+  document.getElementById("progress-area").style.display = "block";
+  document.getElementById("pages-area").style.display = "none";
+  document.getElementById("summary-area").style.display = "none";
+  document.getElementById("page-cards").innerHTML = "";
+  document.getElementById("site-issues-chips").innerHTML = "";
+  document.getElementById("site-issues-area").style.display = "none";
+  document.getElementById("spinner").style.display = "block";
+  document.getElementById("status-text").textContent = "Analiz başlatılıyor...";
+  document.getElementById("btn-analyze").disabled = true;
+
+  const res = await fetch("/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(cfg),
+  });
+  const { job_id } = await res.json();
+
+  const es = new EventSource(`/stream/${job_id}`);
+  es.onmessage = e => handleMessage(JSON.parse(e.data), es);
+  es.onerror = () => {
+    setStatus("Bağlantı hatası.");
+    document.getElementById("btn-analyze").disabled = false;
+    es.close();
+  };
+}
+
+function handleMessage(msg, es) {
+  if (msg.type === "status") {
+    setStatus(msg.msg);
+  } else if (msg.type === "site_issue") {
+    const area = document.getElementById("site-issues-area");
+    area.style.display = "block";
+    const chip = document.createElement("span");
+    chip.className = "issue-chip";
+    const colors = { error: "#ff4d4d", warning: "#ffb347", ok: "#4ade80", info: "#60a5fa" };
+    const labels = { error: "HATA", warning: "UYARI", ok: "TAMAM", info: "BİLGİ" };
+    const c = colors[msg.severity] || "#888";
+    chip.style.cssText = `background:${c}22;border:1px solid ${c}44`;
+    chip.innerHTML = `<span style="color:${c};font-weight:700;font-size:.68rem">${labels[msg.severity] || msg.severity}</span> ${esc(msg.name)}: ${esc(msg.message)}`;
+    document.getElementById("site-issues-chips").appendChild(chip);
+  } else if (msg.type === "page_done") {
+    document.getElementById("pages-area").style.display = "block";
+    appendPageCard(msg);
+  } else if (msg.type === "done") {
+    setStatus("Analiz tamamlandı ✅");
+    document.getElementById("spinner").style.display = "none";
+    showSummary(msg);
+    document.getElementById("btn-analyze").disabled = false;
+    es.close();
+  } else if (msg.type === "error") {
+    setStatus("HATA: " + msg.msg);
+    document.getElementById("spinner").style.display = "none";
+    document.getElementById("btn-analyze").disabled = false;
+    es.close();
+  } else if (msg.type === "end") {
+    es.close();
+  }
+}
+
+function setStatus(text) {
+  document.getElementById("status-text").textContent = text;
+}
+
+function scoreClass(s) {
+  return s >= 80 ? "score-green" : s >= 60 ? "score-yellow" : "score-red";
+}
+
+function appendPageCard(p) {
+  const card = document.createElement("div");
+  card.className = "page-card";
+  const sc = scoreClass(p.score);
+  const cats = {};
+  (p.issues || []).forEach(i => {
+    if (!cats[i.category]) cats[i.category] = [];
+    cats[i.category].push(i);
+  });
+  const sevColors = { error: "sev-error", warning: "sev-warning", ok: "sev-ok", info: "sev-info" };
+  const sevLabels = { error: "HATA", warning: "UYARI", ok: "TAMAM", info: "BİLGİ" };
+  const sevBg = { error: "#ff4d4d11", warning: "#ffb34711", ok: "#4ade8011", info: "#60a5fa11" };
+
+  let catsHtml = "";
+  for (const [cat, issues] of Object.entries(cats)) {
+    const rows = issues.map(i => `
+      <div class="issue-row" style="background:${sevBg[i.severity] || 'transparent'}">
+        <span class="sev-badge ${sevColors[i.severity] || ''}">${sevLabels[i.severity] || i.severity}</span>
+        <div>
+          <span class="issue-name">${esc(i.name)}</span>
+          <span class="issue-msg">— ${esc(i.message)}</span>
+          ${i.fix ? `<div class="issue-fix">💡 ${esc(i.fix)}</div>` : ""}
+        </div>
+      </div>`).join("");
+    catsHtml += `<div class="cat-block"><div class="cat-name">${esc(cat)}</div>${rows}</div>`;
+  }
+
+  const cardId = "card-" + Math.random().toString(36).slice(2);
+  card.innerHTML = `
+    <div class="page-card-header" onclick="toggleCard('${cardId}')">
+      <div class="ph-left">
+        <span class="ph-label">${esc(p.label)}</span>
+        <span class="ph-url">${esc(p.url)}</span>
+      </div>
+      <div class="ph-right">
+        <span class="score-badge ${sc}">${p.score}/100</span>
+        <span class="pill">HTTP ${p.status_code}</span>
+        <span class="pill">${p.load_time}s</span>
+        <span class="pill">${p.render_method}</span>
+        <span class="pill err">${p.errors} hata</span>
+        <span class="pill warn">${p.warnings} uyarı</span>
+        <span class="chevron" id="chev-${cardId}">▼</span>
+      </div>
+    </div>
+    <div class="page-card-body open" id="${cardId}">
+      ${catsHtml || '<p style="color:var(--green);padding:5px 0">Bu sayfa için sorun bulunamadı ✅</p>'}
+    </div>`;
+  document.getElementById("page-cards").appendChild(card);
+  card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function toggleCard(id) {
+  document.getElementById(id).classList.toggle("open");
+  document.getElementById("chev-" + id).classList.toggle("open");
+}
+
+function showSummary(msg) {
+  const area = document.getElementById("summary-area");
+  area.style.display = "block";
+  const avg = msg.avg_score;
+  const barColor = avg >= 80 ? "var(--green)" : avg >= 60 ? "var(--yellow)" : "var(--red)";
+  document.getElementById("summary-grid").innerHTML = `
+    <div class="stat-card">
+      <div class="stat-num" style="color:${barColor}">${avg}</div>
+      <div class="stat-label">Ortalama Skor</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${avg}%;background:${barColor}"></div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="color:var(--red)">${msg.total_errors}</div>
+      <div class="stat-label">Toplam Hata</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="color:var(--yellow)">${msg.total_warnings}</div>
+      <div class="stat-label">Toplam Uyarı</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">${msg.pages_count}</div>
+      <div class="stat-label">Analiz Edilen</div>
+    </div>`;
+  area.scrollIntoView({ behavior: "smooth" });
+}
+
+function esc(str) {
+  return String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+</script>
+</body>
+</html>

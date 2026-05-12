@@ -9,6 +9,7 @@ env/
 # Üretilen raporlar
 rapor/
 *.html
+!templates/*.html
 *.md
 !README.md
 *.json
