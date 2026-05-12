@@ -9,6 +9,10 @@ Kullanım:
 import os
 import sys
 import argparse
+
+if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf-8-sig"):
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
 import yaml
 from colorama import init, Fore, Style
 from urllib.parse import urljoin
@@ -27,9 +31,10 @@ def load_config(path: str) -> dict:
 
 
 def print_banner():
-    print(f"\n{Fore.CYAN}{'─'*55}")
-    print(f"  🔍  SEO Analyzer")
-    print(f"{'─'*55}{Style.RESET_ALL}\n")
+    sep = "-" * 55
+    print(f"\n{Fore.CYAN}{sep}")
+    print(f"  SEO Analyzer")
+    print(f"{sep}{Style.RESET_ALL}\n")
 
 
 def print_page_result(page: PageReport):
