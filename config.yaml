@@ -1,0 +1,56 @@
+# ─────────────────────────────────────────────
+#  SEO Analyzer – Site Konfigürasyonu
+#  Her site için bu dosyayı düzenleyin.
+# ─────────────────────────────────────────────
+
+site_name: "Semax Boya Makina"
+base_url: "https://semaxboyamakina.com"   # sonuna / koymayın
+
+# Taranacak sayfalar – URL'leri siz belirleyin
+pages:
+  - url: "/"
+    label: "Anasayfa"
+    type: "home"
+
+  - url: "/blog"
+    label: "Blog Listesi"
+    type: "blog_list"
+
+  - url: "/blog/ornek-blog-basligi"     # ← gerçek slug yazın
+    label: "Blog Detay"
+    type: "blog_detail"
+
+  - url: "/iletisim"
+    label: "İletişim"
+    type: "contact"
+
+  # İhtiyaca göre ekleyin:
+  # - url: "/hizmetler"
+  #   label: "Hizmetler"
+  #   type: "service_list"
+  #
+  # - url: "/hizmetler/boya-makinasi"
+  #   label: "Hizmet Detay"
+  #   type: "service_detail"
+  #
+  # - url: "/hakkimizda"
+  #   label: "Hakkımızda"
+  #   type: "about"
+
+# ─── Teknik Ayarlar ───────────────────────────
+settings:
+  timeout: 30
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+  use_playwright: "auto"     # auto | always | never
+  output_dir: "./rapor"
+  check_broken_links: false  # true yaparsanız yavaşlar
+
+# ─── İçerik Kalitesi Eşikleri ─────────────────
+min_word_count:
+  home: 400
+  blog_detail: 600
+  service_detail: 500
+  blog_list: 200
+  service_list: 200
+  contact: 100
+  default: 300
