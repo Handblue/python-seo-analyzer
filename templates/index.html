@@ -274,10 +274,42 @@
                    color: #fff; font-size: .87rem; font-weight: 700; cursor: pointer; margin-top: 6px; }
   .settings-save:hover { opacity: .85; }
 
+  /* ── Sitemap import ── */
+  .sitemap-import-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .sitemap-import-row input { flex: 1; }
+  .btn-sitemap { background: var(--surface3); border: 1px solid var(--border); color: var(--blue);
+                 padding: 8px 10px; border-radius: 7px; font-size: .78rem; cursor: pointer; white-space: nowrap; }
+  .btn-sitemap:hover { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .btn-sitemap:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ── Export buttons ── */
+  .export-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .btn-export { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px;
+                border-radius: 7px; font-size: .83rem; font-weight: 700; cursor: pointer;
+                text-decoration: none; border: 1px solid; }
+  .btn-export-csv { background: #052e1633; color: var(--green); border-color: #4ade8033; }
+  .btn-export-csv:hover { background: var(--green); color: #000; }
+  .btn-export-pdf { background: #1e1b4b33; color: #a5b4fc; border-color: #a5b4fc33; }
+  .btn-export-pdf:hover { background: #a5b4fc; color: #000; }
+
   /* ── Scrollbar ── */
   ::-webkit-scrollbar { width: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+  /* ── Print / PDF ── */
+  @media print {
+    .sidebar, .stab-bar, #progress-area, .export-row, .btn-report { display: none !important; }
+    .app { display: block; }
+    .main, #analyzer-main, .main-scroll { display: block; overflow: visible; height: auto; }
+    body { background: #fff; color: #000; }
+    .page-card { border: 1px solid #ccc; border-radius: 0; margin-bottom: 12px; break-inside: avoid; }
+    .page-card-header { background: #f5f5f5; }
+    .issue-row { border-left: 3px solid #ccc; }
+    .stat-card { border: 1px solid #ccc; }
+    .summary-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
 </style>
 </head>
 
@@ -326,7 +358,10 @@
         </div>
         <div class="pages-header">
           <label>Sayfalar</label>
-          <button class="btn-add" onclick="addPage()">+ Ekle</button>
+          <div style="display:flex;gap:5px">
+            <button class="btn-sitemap" id="btn-sitemap" onclick="importSitemap()" title="Sitemap.xml'den sayfalari içe aktar">🗺️ Sitemap</button>
+            <button class="btn-add" onclick="addPage()">+ Ekle</button>
+          </div>
         </div>
         <div id="pages-list"></div>
         <button class="settings-toggle" onclick="toggleSettings()">
@@ -375,6 +410,7 @@
             <button class="insp-nav-btn" data-tab="bl" onclick="inspTab('bl')">🔗 Kırık Linkler</button>
             <button class="insp-nav-btn" data-tab="sm" onclick="inspTab('sm')">🗺️ Sitemap</button>
             <button class="insp-nav-btn" data-tab="k" onclick="inspTab('k')">🔑 Anahtar Kelimeler</button>
+            <button class="insp-nav-btn" data-tab="hl" onclick="inspTab('hl')">🌍 Hreflang & Dil</button>
             <button class="insp-nav-btn" data-tab="r" onclick="inspTab('r')">🤖 robots.txt</button>
             <button class="insp-nav-btn" data-tab="f" onclick="inspTab('f')">🚀 Performans</button>
           </div>
@@ -410,7 +446,11 @@
         <div id="summary-area">
           <div class="section-title" style="margin-bottom:9px;">Özet</div>
           <div class="summary-grid" id="summary-grid"></div>
-          <a href="/report" target="_blank" class="btn-report">HTML Raporunu Aç &rarr;</a>
+          <div class="export-row">
+            <a href="/report" target="_blank" class="btn-export btn-export-pdf">📄 HTML Rapor</a>
+            <a href="/download/csv" class="btn-export btn-export-csv">⬇️ CSV İndir</a>
+            <button onclick="window.print()" class="btn-export btn-export-pdf">🖨️ PDF Yazdır</button>
+          </div>
         </div>
       </div>
     </div>
@@ -491,7 +531,8 @@ async function fetchInspector(url, tab) {
 function renderInspTab(tab, data, panel) {
   const fns = { h: renderHeadings, m: renderMeta, og: renderOG, i: renderImages,
                 sc: renderSchema, cv: renderCWV, bl: renderBrokenLinks,
-                sm: renderSitemap, k: renderKeywords, r: renderRobots, f: renderPerformance };
+                sm: renderSitemap, k: renderKeywords, hl: renderHreflang,
+                r: renderRobots, f: renderPerformance };
   const fn = fns[tab];
   if (!fn) return;
   panel.innerHTML = fn(data);
@@ -798,6 +839,76 @@ function renderPerformance(d) {
     ${typeRows ? `<div class="i-sep">Kaynak Türleri</div><div class="i-tbl-wrap"><table class="i-tbl"><thead><tr><th>Tür</th><th>Adet</th><th>Boyut</th></tr></thead><tbody>${typeRows}</tbody></table></div>` : ''}
     ${topRows ? `<div class="i-sep">En Büyük Kaynaklar</div><div class="i-tree scroll">${topRows}</div>` : ''}
   `;
+}
+
+// ── 12. Hreflang & Dil ───────────────────────
+function renderHreflang(d) {
+  const tags = d.tags || [];
+  const issueTags = (d.issues || []).map(i => {
+    const cls = i.cls === 'bad' ? 'i-bad' : i.cls === 'ok' ? 'i-ok' : i.cls === 'warn' ? 'i-warn' : 'i-neu';
+    return `<span class="i-tag ${cls}">${esc(i.t)}</span>`;
+  }).join('');
+
+  const htmlLang = d.html_lang
+    ? `<div class="i-card" style="margin-bottom:10px">
+        <div class="i-card-title">HTML lang Attribute</div>
+        <div class="i-card-val"><span class="i-tag i-ok">${esc(d.html_lang)}</span></div>
+       </div>`
+    : `<div class="i-card" style="margin-bottom:10px">
+        <div class="i-card-title">HTML lang Attribute</div>
+        <div class="i-card-val"><span class="i-tag i-warn">Tanımlanmamış</span></div>
+       </div>`;
+
+  if (!tags.length) {
+    return htmlLang
+      + `<div class="i-tags">${issueTags}</div>`
+      + `<div class="insp-info">Bu sayfa hreflang tag kullanmıyor. Çok dilli siteler için önerilir.</div>`;
+  }
+
+  const rows = tags.map(t => {
+    const isXDef = t.lang === 'x-default';
+    return `<div class="i-row" style="align-items:center;gap:8px">
+      <span class="i-tag ${isXDef ? 'i-neu' : 'i-ok'}" style="min-width:72px;text-align:center">${esc(t.lang)}</span>
+      <span style="flex:1;font-size:.79rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)"
+            title="${esc(t.url)}">${esc(t.url || '—')}</span>
+    </div>`;
+  }).join('');
+
+  return htmlLang
+    + `<div class="i-tags" style="margin-bottom:10px">${issueTags}</div>`
+    + `<div class="i-sep">Hreflang Etiketleri (${tags.length})</div>`
+    + `<div class="i-tree scroll">${rows}</div>`;
+}
+
+// ──────────────────────────────────────────────
+// SITEMAP IMPORT
+// ──────────────────────────────────────────────
+async function importSitemap() {
+  const baseUrl = (document.getElementById('base-url').value || '').trim();
+  if (!baseUrl) { alert('Önce Base URL girin.'); return; }
+  const btn = document.getElementById('btn-sitemap');
+  btn.disabled = true;
+  btn.textContent = '⏳ Yükleniyor...';
+  try {
+    const res = await fetch('/api/sitemap-pages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base_url: baseUrl }),
+    });
+    const data = await res.json();
+    if (data.error) { alert('Sitemap hatası: ' + data.error); return; }
+    // Clear existing pages and add from sitemap
+    document.getElementById('pages-list').innerHTML = '';
+    pageCount = 0;
+    const pages = data.pages || [];
+    pages.forEach(p => addPage(p));
+    btn.textContent = `✅ ${pages.length} sayfa`;
+    setTimeout(() => { btn.textContent = '🗺️ Sitemap'; btn.disabled = false; }, 2500);
+  } catch (e) {
+    alert('Bağlantı hatası: ' + e.message);
+    btn.textContent = '🗺️ Sitemap';
+    btn.disabled = false;
+  }
 }
 
 // ──────────────────────────────────────────────

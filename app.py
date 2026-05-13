@@ -3,6 +3,8 @@ app.py – SEO Analyzer Web Arayüzü
 """
 import os
 import sys
+import csv
+import io
 import json
 import uuid
 import threading
@@ -169,7 +171,7 @@ def api_inspect():
     base_url = f"{parsed.scheme}://{parsed.netloc}"
 
     # Tabs that need the full page HTML
-    if tab in ("h", "m", "og", "i", "sc", "bl", "o", "k"):
+    if tab in ("h", "m", "og", "i", "sc", "bl", "o", "k", "hl"):
         res = inspector.fetch_url(url)
         if not res["ok"]:
             return jsonify({"error": res["error"]}), 400
@@ -188,13 +190,14 @@ def api_inspect():
     elif tab == "sc":
         return jsonify({"schemas": inspector.get_schema(soup)})
     elif tab == "bl":
-        results = inspector.check_broken_links(soup, final_url)
-        return jsonify({"links": results})
+        return jsonify({"links": inspector.check_broken_links(soup, final_url)})
     elif tab == "o":
         return jsonify(inspector.get_readability(soup))
     elif tab == "k":
         mode = int(data.get("mode", 1))
         return jsonify({"keywords": inspector.get_keywords(soup, mode)})
+    elif tab == "hl":
+        return jsonify(inspector.get_hreflang(soup, final_url))
     elif tab == "sm":
         return jsonify(inspector.get_sitemap(base_url))
     elif tab == "w":
@@ -214,6 +217,65 @@ def api_inspect():
         return jsonify(inspector.get_pagespeed(url, strategy, api_key))
     else:
         return jsonify({"error": "Bilinmeyen sekme"}), 400
+
+
+@app.route("/api/sitemap-pages", methods=["POST"])
+def api_sitemap_pages():
+    data     = request.get_json()
+    base_url = (data.get("base_url") or "").strip().rstrip("/")
+    if not base_url:
+        return jsonify({"error": "base_url gerekli"}), 400
+
+    result  = inspector.get_sitemap(base_url)
+    entries = result.get("entries", [])
+    if not entries:
+        return jsonify({"error": result.get("error", "Sitemap boş veya bulunamadı")}), 400
+
+    pages = []
+    for e in entries:
+        loc = (e.get("loc") or "").strip()
+        if not loc:
+            continue
+        path = loc[len(base_url):] if loc.startswith(base_url) else loc
+        path = path or "/"
+        pages.append({"url": path, "label": path, "type": "default"})
+
+    return jsonify({"pages": pages[:60], "total": len(entries)})
+
+
+@app.route("/download/csv")
+def download_csv():
+    path = os.path.join(OUT_DIR, "seo_raporu.json")
+    if not os.path.exists(path):
+        return "Henüz analiz yapılmadı.", 404
+
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    out = io.StringIO()
+    w   = csv.writer(out)
+    w.writerow(["Sayfa", "URL", "Skor", "HTTP", "Yük(s)", "Hata", "Uyarı",
+                "Kategori", "Önem", "Sorun", "Mesaj", "Çözüm"])
+
+    for page in data.get("pages", []):
+        issues = page.get("issues", [])
+        if not issues:
+            w.writerow([page["label"], page["url"], page["score"],
+                        page["status_code"], page["load_time"],
+                        page["errors"], page["warnings"], "", "", "", "", ""])
+        for issue in issues:
+            w.writerow([page["label"], page["url"], page["score"],
+                        page["status_code"], page["load_time"],
+                        page["errors"], page["warnings"],
+                        issue["category"], issue["severity"],
+                        issue["name"], issue["message"], issue.get("fix", "")])
+
+    out.seek(0)
+    return Response(
+        "﻿" + out.getvalue(),   # BOM for Excel UTF-8
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=seo_raporu.csv"},
+    )
 
 
 if __name__ == "__main__":

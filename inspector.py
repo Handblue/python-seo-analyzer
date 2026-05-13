@@ -354,7 +354,43 @@ def get_robots(base_url: str) -> dict:
     return {"status": status, "text": text[:5000] if text else "", "url": url}
 
 
-# ── 14. Performance (Playwright) ─────────────────────────────
+# ── 14. Hreflang & Dil Denetimi ─────────────────────────────
+def get_hreflang(soup: BeautifulSoup, url: str) -> dict:
+    tags = []
+    for link in soup.find_all("link", rel="alternate"):
+        hl = link.get("hreflang")
+        href = link.get("href")
+        if hl:
+            tags.append({"lang": hl, "url": href or ""})
+
+    html_tag = soup.find("html")
+    html_lang = html_tag.get("lang") if html_tag else None
+
+    issues = []
+    if not tags:
+        issues.append({"cls": "neu", "t": "Hreflang tag bulunamadı"})
+    else:
+        langs = [t["lang"] for t in tags]
+        if "x-default" not in langs:
+            issues.append({"cls": "warn", "t": "x-default eksik"})
+        else:
+            issues.append({"cls": "ok", "t": "x-default mevcut ✓"})
+
+        seen, dups = set(), set()
+        for l in langs:
+            (dups if l in seen else seen).add(l)
+        if dups:
+            issues.append({"cls": "bad", "t": f"Tekrarlayan kod: {', '.join(dups)}"})
+        else:
+            issues.append({"cls": "ok", "t": f"{len(tags)} dil tanımlandı ✓"})
+
+        if html_lang and html_lang not in langs:
+            issues.append({"cls": "warn", "t": f"HTML lang='{html_lang}' hreflang listesinde yok"})
+
+    return {"tags": tags, "count": len(tags), "html_lang": html_lang, "issues": issues}
+
+
+# ── 15. Performance (Playwright) ─────────────────────────────
 def get_performance(url: str, timeout: int = 30) -> dict:
     try:
         from playwright.sync_api import sync_playwright
