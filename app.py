@@ -13,8 +13,9 @@ import webbrowser
 from flask import Flask, render_template, request, Response, stream_with_context, jsonify
 from urllib.parse import urlparse
 
-if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf-8-sig"):
+if sys.stdout and sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf-8-sig"):
     sys.stdout.reconfigure(encoding="utf-8")
+if sys.stderr and sys.stderr.encoding and sys.stderr.encoding.lower() not in ("utf-8", "utf-8-sig"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 from fetcher import fetch_page, fetch_text_url
