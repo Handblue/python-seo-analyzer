@@ -228,13 +228,29 @@ def api_inspect():
 
 @app.route("/api/sitemap-pages", methods=["POST"])
 def api_sitemap_pages():
-    data     = request.get_json()
-    base_url = (data.get("base_url") or "").strip().rstrip("/")
-    if not base_url:
-        return jsonify({"error": "base_url gerekli"}), 400
+    data        = request.get_json()
+    base_url    = (data.get("base_url") or "").strip().rstrip("/")
+    sitemap_url = (data.get("sitemap_url") or "").strip()
 
-    result  = inspector.get_sitemap(base_url)
+    if not sitemap_url and not base_url:
+        return jsonify({"error": "sitemap_url veya base_url gerekli"}), 400
+
+    # Derive base_url from sitemap_url when not provided
+    if sitemap_url and not base_url:
+        p = urlparse(sitemap_url)
+        base_url = f"{p.scheme}://{p.netloc}"
+
+    result  = inspector.get_sitemap(base_url, sitemap_url)
     entries = result.get("entries", [])
+
+    # If sitemap index, fetch first child sitemap for real page URLs
+    if result.get("type") == "index" and entries:
+        first_loc = (entries[0].get("loc") or "").strip()
+        if first_loc:
+            child = inspector.get_sitemap("", first_loc)
+            if child.get("entries"):
+                entries = child["entries"]
+
     if not entries:
         return jsonify({"error": result.get("error", "Sitemap boş veya bulunamadı")}), 400
 

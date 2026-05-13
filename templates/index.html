@@ -292,6 +292,22 @@
   .btn-export-pdf { background: #1e1b4b33; color: #a5b4fc; border-color: #a5b4fc33; }
   .btn-export-pdf:hover { background: #a5b4fc; color: #000; }
 
+  /* ── Sitemap modal ── */
+  .sm-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.65);
+                      z-index: 100; align-items: center; justify-content: center; }
+  .sm-modal-overlay.on { display: flex; }
+  .sm-modal-box { background: var(--surface); border: 1px solid var(--border); border-radius: 11px;
+                  padding: 22px; width: 420px; box-shadow: 0 8px 32px #0009; }
+  .sm-modal-box h2 { font-size: .92rem; font-weight: 700; margin-bottom: 14px;
+                     display: flex; justify-content: space-between; align-items: center; }
+  .sm-modal-close { background: none; border: none; cursor: pointer; font-size: 1rem; color: var(--muted); }
+  .sm-modal-close:hover { color: var(--text); }
+  .sm-modal-status { font-size: .78rem; min-height: 18px; margin: 6px 0 12px; }
+  .sm-modal-btns { display: flex; gap: 8px; }
+  .sm-modal-btns .btn-cancel { flex: 1; padding: 9px; background: var(--surface2); border: 1px solid var(--border);
+                               border-radius: 7px; color: var(--muted); cursor: pointer; font-size: .87rem; }
+  .sm-modal-btns .btn-cancel:hover { color: var(--text); }
+
   /* ── Scrollbar ── */
   ::-webkit-scrollbar { width: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -323,6 +339,25 @@
       <div style="font-size:.69rem;color:var(--muted);margin-top:3px">PageSpeed sekmesi için gerekli. Google Cloud Console'dan ücretsiz alınır.</div>
     </div>
     <button class="settings-save" id="settingsSave">💾 Kaydet</button>
+  </div>
+</div>
+
+<!-- Sitemap Modal -->
+<div class="sm-modal-overlay" id="sitemapModal">
+  <div class="sm-modal-box">
+    <h2>🗺️ Sitemap İçe Aktar
+      <button class="sm-modal-close" onclick="closeSitemapModal()">✕</button>
+    </h2>
+    <div class="field" style="margin-bottom:6px">
+      <label>Sitemap URL</label>
+      <input type="text" id="sitemap-url-input" placeholder="https://example.com/sitemap.xml"
+             onkeydown="if(event.key==='Enter')doImportSitemap()">
+    </div>
+    <div class="sm-modal-status" id="sitemap-modal-status"></div>
+    <div class="sm-modal-btns">
+      <button class="btn-run" id="btn-sitemap-fetch" onclick="doImportSitemap()" style="flex:1">İçe Aktar</button>
+      <button class="btn-cancel" onclick="closeSitemapModal()">İptal</button>
+    </div>
   </div>
 </div>
 
@@ -883,33 +918,77 @@ function renderHreflang(d) {
 // ──────────────────────────────────────────────
 // SITEMAP IMPORT
 // ──────────────────────────────────────────────
-async function importSitemap() {
-  const baseUrl = (document.getElementById('base-url').value || '').trim();
-  if (!baseUrl) { alert('Önce Base URL girin.'); return; }
-  const btn = document.getElementById('btn-sitemap');
+function importSitemap() {
+  const baseUrl = (document.getElementById('base-url').value || '').trim().replace(/\/+$/, '');
+  const input = document.getElementById('sitemap-url-input');
+  input.value = baseUrl ? baseUrl + '/sitemap.xml' : '';
+  document.getElementById('sitemap-modal-status').textContent = '';
+  document.getElementById('sitemap-modal-status').style.color = 'var(--muted)';
+  const btn = document.getElementById('btn-sitemap-fetch');
+  btn.disabled = false;
+  btn.textContent = 'İçe Aktar';
+  document.getElementById('sitemapModal').classList.add('on');
+  setTimeout(() => input.select(), 60);
+}
+
+function closeSitemapModal() {
+  document.getElementById('sitemapModal').classList.remove('on');
+}
+
+async function doImportSitemap() {
+  const sitemapUrl = (document.getElementById('sitemap-url-input').value || '').trim();
+  if (!sitemapUrl) { document.getElementById('sitemap-url-input').focus(); return; }
+
+  const btn    = document.getElementById('btn-sitemap-fetch');
+  const status = document.getElementById('sitemap-modal-status');
   btn.disabled = true;
   btn.textContent = '⏳ Yükleniyor...';
+  status.textContent = 'Sitemap çekiliyor...';
+  status.style.color = 'var(--muted)';
+
+  const baseUrl = (document.getElementById('base-url').value || '').trim().replace(/\/+$/, '');
+
   try {
     const res = await fetch('/api/sitemap-pages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ base_url: baseUrl }),
+      body: JSON.stringify({ base_url: baseUrl, sitemap_url: sitemapUrl }),
     });
     const data = await res.json();
-    if (data.error) { alert('Sitemap hatası: ' + data.error); return; }
-    // Clear existing pages and add from sitemap
+    if (data.error) {
+      status.textContent = '⚠️ ' + data.error;
+      status.style.color = 'var(--red)';
+      btn.disabled = false;
+      btn.textContent = 'Tekrar Dene';
+      return;
+    }
+    const pages = data.pages || [];
     document.getElementById('pages-list').innerHTML = '';
     pageCount = 0;
-    const pages = data.pages || [];
     pages.forEach(p => addPage(p));
-    btn.textContent = `✅ ${pages.length} sayfa`;
-    setTimeout(() => { btn.textContent = '🗺️ Sitemap'; btn.disabled = false; }, 2500);
+    // Auto-fill base-url if it was empty
+    if (!baseUrl) {
+      try {
+        const origin = new URL(sitemapUrl).origin;
+        const bu = document.getElementById('base-url');
+        if (!bu.value.trim()) bu.value = origin;
+      } catch (_) {}
+    }
+    closeSitemapModal();
+    const sitemapBtn = document.getElementById('btn-sitemap');
+    sitemapBtn.textContent = `✅ ${pages.length} sayfa`;
+    setTimeout(() => { sitemapBtn.textContent = '🗺️ Sitemap'; }, 2500);
   } catch (e) {
-    alert('Bağlantı hatası: ' + e.message);
-    btn.textContent = '🗺️ Sitemap';
+    status.textContent = '⚠️ Bağlantı hatası: ' + e.message;
+    status.style.color = 'var(--red)';
     btn.disabled = false;
+    btn.textContent = 'Tekrar Dene';
   }
 }
+
+document.getElementById('sitemapModal').onclick = e => {
+  if (e.target === e.currentTarget) closeSitemapModal();
+};
 
 // ──────────────────────────────────────────────
 // SETTINGS

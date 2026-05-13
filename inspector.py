@@ -224,16 +224,17 @@ def check_broken_links(soup: BeautifulSoup, base_url: str, timeout: int = 8) -> 
 
 
 # ── 9. Sitemap ───────────────────────────────────────────────
-def get_sitemap(base_url: str) -> dict:
+def get_sitemap(base_url: str, sitemap_url: str = "") -> dict:
     from xml.etree import ElementTree as ET
 
-    # Find sitemap URL from robots.txt
-    _, robots = fetch_text(base_url.rstrip("/") + "/robots.txt")
-    sitemap_url = base_url.rstrip("/") + "/sitemap.xml"
-    if robots:
-        m = re.search(r"Sitemap:\s*(\S+)", robots, re.I)
-        if m:
-            sitemap_url = m.group(1).strip()
+    if not sitemap_url:
+        # Auto-discover sitemap from robots.txt
+        _, robots = fetch_text(base_url.rstrip("/") + "/robots.txt")
+        sitemap_url = base_url.rstrip("/") + "/sitemap.xml"
+        if robots:
+            m = re.search(r"Sitemap:\s*(\S+)", robots, re.I)
+            if m:
+                sitemap_url = m.group(1).strip()
 
     status, text = fetch_text(sitemap_url)
     if status != 200:
