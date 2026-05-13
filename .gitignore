@@ -14,6 +14,10 @@ rapor/
 !README.md
 *.json
 
+# PyInstaller
+build/
+dist/
+
 # IDE
 .vscode/
 .idea/

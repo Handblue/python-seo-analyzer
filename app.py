@@ -22,9 +22,16 @@ from checks import PageAnalyzer, PageReport, SiteReport, check_site_wide, Sev
 from reporter import save_html, save_markdown, save_json
 import inspector
 
-app = Flask(__name__)
+if getattr(sys, "frozen", False):
+    _BASE    = os.path.dirname(sys.executable)
+    _MEIPASS = getattr(sys, "_MEIPASS", _BASE)
+    app = Flask(__name__, template_folder=os.path.join(_MEIPASS, "templates"))
+else:
+    _BASE = os.path.dirname(os.path.abspath(__file__))
+    app = Flask(__name__)
+
 jobs: dict[str, queue.Queue] = {}
-OUT_DIR = "./rapor"
+OUT_DIR = os.path.join(_BASE, "rapor")
 
 
 def run_analysis(job_id: str, cfg: dict):
